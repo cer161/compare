@@ -12,7 +12,7 @@
 
 #define MAX_LENGTH 1000
 #define BUF_SIZE 20
-#define SIZE 100
+#define SIZE 1000
 
 pthread_mutex_t locked;
 static int chars;
@@ -44,7 +44,7 @@ typedef struct args args;
 int insert(char* file, queue *q){
     char* item = file;
     if(q->rear == SIZE-1){
-       // printf("No room in the queue\n");
+        printf("No room in the queue\n");
         return 1;
     }
      if(q->front == -1){
@@ -137,61 +137,74 @@ char* readSource(int f)
 }
 
 void *analyzeWordFrequencies(void* arguments){
-
+	 //Wait for the traverseDir method to finish finding all of the files nested in the directory
+	 sleep(5);
+	 args *queues = (args*) arguments;
+   	 queue* files = &queues->arg1;
+	 while(files->front != -1 && files->front <= files->rear){
+		printf("Files to analyze: %s\n", pop(files));
+	}
+	
 }
 
 
 //Traverse the directories 
 void *traverseDir(void* arguments){
-    args *queues = (args*) arguments;
-    queue* files = &queues->arg1;
-    queue* dirs = &queues->arg2;
-    char* current_dir;
+	args *queues = (args*) arguments;
+	queue* files = &queues->arg1;
+	queue* dirs = &queues->arg2;
+	char* current_dir;
     
-    //entering critical section
-   pthread_mutex_lock(&locked);
-
-    //printf("Dir: %s\n", pop(dirs));
-    //while the queue is not empty pop each directory and traverse
-    while(dirs->front != -1 && dirs->front <= dirs->rear){
-        current_dir = pop(dirs);
-	printf("DIRS.FRONT %d\n", dirs->front );
-	printf("DIRS.REAR %d\n", dirs->rear );
-	printf("IN THE WHILE LOOP\n");
-	//traverse directory -- add any directories to the directories queue and any files to the files que
-	  // make struct to interface w/ directory, cd to chosen directory
-                        struct dirent *file;
+	//entering critical section
+	pthread_mutex_lock(&locked);
+	//while the queue is not empty pop each directory and traverse
+	int first = 0;
+	
+	while(dirs->front != -1 && dirs->front <= dirs->rear){
+			char* head;
+			char* path;
+       			current_dir = pop(dirs);
+			//Save the directory entered by the user to return the path
+			if(first == 0){
+				head = current_dir;
+				first = 1;
+			}
+			//traverse directory -- add any directories to the directories queue and any files to the files queue
+                        char* preFix = ".";
+			char* postFix = "txt";
+			char* ext;
+			char buf[1000];
+			struct dirent *file;
                         chdir(current_dir);
                         // open current directory after cd
                         DIR *cd = opendir(".");
-                        // initialize destFile
-                       // int destFile;
-                        // define prefix
-                        char* preFix = ".";
+			//Cd out of the current directory
+			file = readdir(cd);
+			file = readdir(cd);
                         // loop through files in directory
                         while((file = readdir(cd)) != NULL)
                         {
 				//If the entry is a file and does not begin with ".", add it to the files queue
                                 if((file->d_type == DT_REG) && !(strncmp(preFix, file->d_name, strlen(preFix))==0))
                                 {
-					//printf("File is a file\n");
-					//insert("manual.txt", files);
+					ext = strchr(file->d_name, '.') + 1;
+					if(strcmp(ext, postFix) == 0){
+						realpath(file->d_name, buf);
+						path = strstr(buf, head);	
+						printf("%s\n", path);
+						insert(path, files);
+					}
                                 }
 				//If the file is a directory, add it to the directories queue
 				else if(file->d_type == DT_DIR){
-					//printf("File is a directory\n");
-					//insert("manual.txt", dirs);
+					insert(file->d_name, dirs);
 				}
                         }
-
-                        // close directory when finished
-                        closedir(cd);
-
-
-
-        printf("%s\n", current_dir);
+	
+        // close directory when finished
+        closedir(cd);
+       // printf("%s\n", current_dir);
     }
-    printf("finished loop\n");
     pthread_mutex_unlock(&locked);
     //left critical section
 }
@@ -227,19 +240,16 @@ int main(int argc, char** argv){
         input = argv[i];
         //optional argument was entered
         if(input[0] == '-'){
-            continue;  
+        	continue;  
         }
         //user entered a file
         if(isDir(input) == 2){
-            insert(input, &queue_files);
+        	insert(input, &queue_files);
         }
         //user entered a directory
         if(isDir(input) == 1){
-		printf("Queue Dirs Front before first insert: %d\n", queue_dirs.rear);
-		printf("Queue Dies Rear before first insert: %d\n", queue_dirs.rear);  
-             insert(input, &queue_dirs);  
-		printf("Queue Dirs Front after first insert: %d\n", queue_dirs.rear);
-		printf("Queue Dies Rear after first insert: %d\n", queue_dirs.rear);  
+        	insert(input, &queue_dirs);  
+		
         }
     }
 

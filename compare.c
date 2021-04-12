@@ -16,8 +16,11 @@
 
 pthread_mutex_t locked;
 static int chars;
+//The jensen-shannon-distance 
+static int jsd;
+static int error_checker;
 
-
+//Queue to retrieve/store files to compare
 struct queue{
     char* items[SIZE];
     int rear;
@@ -26,6 +29,7 @@ struct queue{
 typedef struct queue queue;
 
 
+//Linked list to store file contents
 struct linkedList{
     char* data;
     struct linkedList *next;
@@ -33,6 +37,25 @@ struct linkedList{
 typedef struct linkedList linkedList;
 
 
+//Linked list to store words and their corresponding frequencies
+struct wordsList{
+	char word[1024];
+	int wordFrequency;
+	struct wordsList *next;
+};
+typedef struct wordsList wordsList;
+
+
+//Structure to store all file wordsLists
+struct filesList{
+	wordsList* wordData;
+	char* fileName;
+	struct filesList *next;
+};
+typedef struct filesList filesList;
+
+
+//Arguments to be read by methods called by pthread_create()
 struct args{
 	queue arg1;
 	queue arg2;
@@ -42,17 +65,18 @@ typedef struct args args;
 
 //Insert an item into the queue -- returns 0 on success, 1 on failure
 int insert(char* file, queue *q){
-    char* item = file;
-    if(q->rear == SIZE-1){
-        printf("No room in the queue\n");
-        return 1;
-    }
-     if(q->front == -1){
-            q->front = 0;        
+	char* item = (char*) malloc(sizeof(char) * 100);
+	strcpy(item, file);
+	if(q->rear == SIZE-1){
+       		printf("No room in the queue\n");
+        	return 1;
+    	}
+	if(q->front == -1){
+        	q->front = 0;        
         }
-      q->rear++;
-      q->items[q->rear] = item; 
-      return 0;
+	q->rear++;
+	q->items[q->rear] = item;
+	return 0;
 }
 
 //Pop an item from the queue -- returns the item popped on success, NULL on failure
@@ -68,7 +92,7 @@ char* pop(queue *q){
 }
 
 
-//Method to check if the char* points to a directory or a file. Return 1 if file is a directory, return 2 if file is a file.
+//Method to check if the char* points to a directory or a file -- returns 1 if file is a directory, 2 if file is a file.
 int isDir(char *fileName){
         struct stat data;
         int err = stat(fileName, &data);
@@ -89,62 +113,110 @@ int isDir(char *fileName){
 }
 
 
-char* readSource(int f)
-{
-                // make linked list to read from file iteratively
-                linkedList* curr = malloc(sizeof(linkedList));
-                linkedList* head;
-                curr->data = malloc(sizeof(char*) * BUF_SIZE);
-                curr->next = NULL;
 
-                chars = 0;
 
-                char* tempInput;
-                int bytes;
-                int buf = BUF_SIZE;
-                int loop = 0;
-                int length = 0;
-
-                        //Read the contents of the file into a linked list and append that data into a char*
-                        while(bytes != 0){
-                                if(loop == 0){
-                                        bytes = read(f, curr->data, BUF_SIZE);
-                                        length = bytes;
-                                        curr->data[bytes] = '\0';
-                                        head = curr;
-                                        tempInput = curr->data;
-                                        loop = 1;
-                                }
-                                else{
-                                        loop=1;
-                                        curr->next = malloc(sizeof(linkedList));
-                                        curr = curr->next;
-                                        curr->data = malloc(sizeof(char*) * BUF_SIZE);
-                                        curr->next = NULL;
-                                        bytes = read(f, curr->data, BUF_SIZE);
-                                        curr->data[bytes] = '\0';
-                                        loop--;
-                                        while(curr->data[loop] != '\0'){
-                                                tempInput[length] = curr->data[loop];
-                                                loop++;
-                                                length++;
-                                        }
-                                }
-                        }
-
-                return tempInput;
+//Method to read each word of the file and store them in the wordLists
+wordsList* readSource(FILE *file){
+	wordsList* list = malloc(sizeof(wordsList));
+	wordsList* head;
+	list->wordFrequency = 0;
+	list->next = NULL;
+	char x[1024];
+	int i = 0;
+	while(fscanf(file, " %1023s", x) == 1){
+		if(i == 0){
+			strcpy(list->word, x);
+			//printf("%s\n", list->word);
+			head = list;
+		}
+		else{
+			list->next = malloc(sizeof(wordsList));
+			list = list->next;
+			list->wordFrequency = 0;
+			list->next = NULL;
+			strcpy(list->word, x);
+			//printf("%s\n", list->word);
+		}
+		i++;
+	}
+	return head;
 
 }
 
+//Method to compute the JSD between a pair of files -- returns the Jensen-Shannon-Distance
+int computeJSD(char* curr_file, char* file_to_compare){
+
+	return 0;
+}
+
+//Count the word frequencies for each file
 void *analyzeWordFrequencies(void* arguments){
 	 //Wait for the traverseDir method to finish finding all of the files nested in the directory
-	 sleep(5);
+	 sleep(3);
+	 FILE* file;
+	 char* input;
 	 args *queues = (args*) arguments;
    	 queue* files = &queues->arg1;
-	 while(files->front != -1 && files->front <= files->rear){
-		printf("Files to analyze: %s\n", pop(files));
-	}
+	 char* curr_file;
+	 char* file_to_compare;
+	 queue copy;
+
+	 filesList* curr2 = malloc(sizeof(filesList));
+         filesList* head;
+         curr2->wordData = malloc(sizeof(wordsList));
+	 curr2->fileName = malloc(sizeof(char)*100);
+         curr2->next = NULL;
+
+	 int i = 0;
+	 char buf[1000];
+	 //Store the filenames with their corresponding wordsList
+	 queue copy2 = *files;
+	 while(copy2.front != -1 && copy2.front <= copy2.rear){
+		 curr_file = pop(&copy2);
+		 realpath(curr_file, buf);
+		// file = fopen(curr_file, "r");
+		file = fopen(buf, "r");
+		 wordsList* curr = malloc(sizeof(wordsList));
+	 	 curr->wordFrequency = 0;
+         	 curr->next = NULL;
+		 curr = readSource(file);
+
+		 if(i == 0){
+		 	curr2->wordData = curr;
+	 	 	curr2->fileName = curr_file;
+			head = curr2;
+		}
+		else{
+			curr2->next = malloc(sizeof(filesList));
+			curr2 = curr2->next;
+			curr2->wordData = curr;
+			curr2->fileName = malloc(sizeof(char)*100);
+	 	 	curr2->fileName = curr_file;
+			curr2->next = NULL;
+		}
+		i++;
+	 }
 	
+	 while(head!=NULL){
+		printf("File:\n");
+		while(head->wordData != NULL){
+			printf("%s\n", head->wordData->word );
+			head->wordData = head->wordData->next;
+		}
+		head = head->next;
+	 }
+
+
+	 int jsd;
+	 while(files->front != -1 && files->front <= files->rear){
+		curr_file = pop(files);
+		copy = *files;
+		while(copy.front != -1 && copy.front <= copy.rear){
+			file_to_compare = pop(&copy);
+			jsd = computeJSD(curr_file, file_to_compare);
+			printf("%d %s %s\n", jsd, curr_file, file_to_compare);
+		}
+	}	
 }
 
 
@@ -153,13 +225,13 @@ void *traverseDir(void* arguments){
 	args *queues = (args*) arguments;
 	queue* files = &queues->arg1;
 	queue* dirs = &queues->arg2;
-	char* current_dir;
+	
     
 	//entering critical section
 	pthread_mutex_lock(&locked);
 	//while the queue is not empty pop each directory and traverse
 	int first = 0;
-	
+	char* current_dir;
 	while(dirs->front != -1 && dirs->front <= dirs->rear){
 			char* head;
 			char* path;
@@ -191,8 +263,10 @@ void *traverseDir(void* arguments){
 					if(strcmp(ext, postFix) == 0){
 						realpath(file->d_name, buf);
 						path = strstr(buf, head);	
-						printf("%s\n", path);
 						insert(path, files);
+						//printf("path: %s\n", path);
+						//printf("buf: %s\n", buf);	
+						//insert(file->d_name, files);
 					}
                                 }
 				//If the file is a directory, add it to the directories queue
@@ -214,6 +288,7 @@ int main(int argc, char** argv){
     if(argc <= 1){
         return EXIT_FAILURE;
     }
+    error_checker = 0;
     int err;
     pthread_t th1, th2;
     //Initialize mutex
@@ -274,6 +349,9 @@ int main(int argc, char** argv){
         errno = err;
         perror("pthread_create");
         exit(1);
+    }
+    if(error_checker == 1){
+	return EXIT_FAILURE;
     }
 
     pthread_join(th1, NULL);

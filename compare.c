@@ -173,9 +173,9 @@ void *analyzeWordFrequencies(void* arguments){
 	 queue copy2 = *files;
 	 while(copy2.front != -1 && copy2.front <= copy2.rear){
 		 curr_file = pop(&copy2);
-		 realpath(curr_file, buf);
-		// file = fopen(curr_file, "r");
-		file = fopen(buf, "r");
+		 //realpath(curr_file, buf);
+		 file = fopen(curr_file, "r");
+		 //file = fopen(buf, "r");
 		 wordsList* curr = malloc(sizeof(wordsList));
 	 	 curr->wordFrequency = 0;
          	 curr->next = NULL;

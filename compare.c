@@ -9,6 +9,7 @@
 #include <ctype.h>
 #include <fcntl.h>
 #include <dirent.h>
+#include <ctype.h>
 
 #define MAX_LENGTH 1000
 #define BUF_SIZE 20
@@ -16,9 +17,8 @@
 
 pthread_mutex_t locked;
 static int chars;
-//The jensen-shannon-distance 
-static int jsd;
 static int error_checker;
+static int totalWords;
 
 //Queue to retrieve/store files to compare
 struct queue{
@@ -37,10 +37,11 @@ struct linkedList{
 typedef struct linkedList linkedList;
 
 
-//Linked list to store words and their corresponding frequencies
+//WORD FREQUENCY DISTRIBUTION STRUCTURE words and their corresponding frequencies
 struct wordsList{
 	char word[1024];
-	int wordFrequency;
+	int occurences;
+	double frequency;
 	struct wordsList *next;
 };
 typedef struct wordsList wordsList;
@@ -113,46 +114,91 @@ int isDir(char *fileName){
 }
 
 
-
+char* standardizeString(char* string){
+	char* input = string;
+	char* output = malloc(sizeof(char) * 100);
+	int j = 0;
+	int length = strlen(input);
+	for(int i = 0; i<length; i++){
+		if(ispunct(input[i]) && input[i] != '-'){
+			continue;
+		}
+		else{
+			output[i] = tolower(input[i]);
+			j++;
+		}
+	}
+	return output;
+}
 
 //Method to read each word of the file and store them in the wordLists
 wordsList* readSource(FILE *file){
 	wordsList* list = malloc(sizeof(wordsList));
 	wordsList* head;
-	list->wordFrequency = 0;
+	list->occurences = 1;
+	list->frequency = 0;
 	list->next = NULL;
 	char x[1024];
 	int i = 0;
+	int new;
+	char* holder;
+	totalWords = 0;
 	while(fscanf(file, " %1023s", x) == 1){
+		new = 0;
+		//Take out punctuations and uppercase
+		holder = standardizeString(x);
 		if(i == 0){
-			strcpy(list->word, x);
+			strcpy(list->word, holder);
 			//printf("%s\n", list->word);
 			head = list;
 		}
 		else{
-			list->next = malloc(sizeof(wordsList));
-			list = list->next;
-			list->wordFrequency = 0;
-			list->next = NULL;
-			strcpy(list->word, x);
-			//printf("%s\n", list->word);
+			wordsList* temp = head;
+			while(temp != NULL){
+				if(strcmp(temp->word, holder) == 0){
+					temp->occurences++;	
+					new = 1;
+					break;
+				}
+				else{
+					temp = temp->next;
+				}	
+			}
+			if(new == 0){
+				list->next = malloc(sizeof(wordsList));
+				list = list->next;
+				list->occurences = 1;
+				list->frequency = 0;
+				list->next = NULL;
+				strcpy(list->word, holder);
+				//printf("%s\n", list->word);
+			}
 		}
+		totalWords++;
 		i++;
+	}	
+	//Get the frequency for each word
+	wordsList* t = head;
+	while(t != NULL){
+		t->frequency = t->occurences/(double)totalWords;
+		t = t->next;
 	}
+
+	printf("Total words: %d\n", totalWords);
 	return head;
 
 }
 
 //Method to compute the JSD between a pair of files -- returns the Jensen-Shannon-Distance
-int computeJSD(char* curr_file, char* file_to_compare){
+double computeJSD(char* curr_file, char* file_to_compare){
 
-	return 0;
+	return 0.25;
 }
 
 //Count the word frequencies for each file
 void *analyzeWordFrequencies(void* arguments){
 	 //Wait for the traverseDir method to finish finding all of the files nested in the directory
-	 sleep(3);
+	 sleep(6);
 	 FILE* file;
 	 char* input;
 	 args *queues = (args*) arguments;
@@ -168,16 +214,26 @@ void *analyzeWordFrequencies(void* arguments){
          curr2->next = NULL;
 
 	 int i = 0;
-	 char buf[1000];
+	 char* temp = "/";
+	 char* search;
 	 //Store the filenames with their corresponding wordsList
 	 queue copy2 = *files;
 	 while(copy2.front != -1 && copy2.front <= copy2.rear){
 		 curr_file = pop(&copy2);
-		 //realpath(curr_file, buf);
-		 file = fopen(curr_file, "r");
-		 //file = fopen(buf, "r");
+		 search = strchr(curr_file, '/');
+		 if(search == NULL){
+			 file = fopen(curr_file, "r");
+			//printf("%s\n", curr_file);
+		}
+		else{
+		//file came from inside a directory
+			//printf("%s\n", curr_file);
+			//strcat(temp, curr_file);
+			//file = fopen(temp, "r");
+		}
 		 wordsList* curr = malloc(sizeof(wordsList));
-	 	 curr->wordFrequency = 0;
+	 	 curr->occurences = 0;
+		 curr->frequency = 0;
          	 curr->next = NULL;
 		 curr = readSource(file);
 
@@ -194,27 +250,28 @@ void *analyzeWordFrequencies(void* arguments){
 	 	 	curr2->fileName = curr_file;
 			curr2->next = NULL;
 		}
+		
 		i++;
 	 }
 	
 	 while(head!=NULL){
-		printf("File:\n");
+		printf("File:\n\n");
 		while(head->wordData != NULL){
-			printf("%s\n", head->wordData->word );
+			printf("%s %0.2f\n", head->wordData->word, head->wordData->frequency);
 			head->wordData = head->wordData->next;
 		}
 		head = head->next;
 	 }
 
 
-	 int jsd;
+	 double jsd;
 	 while(files->front != -1 && files->front <= files->rear){
 		curr_file = pop(files);
 		copy = *files;
 		while(copy.front != -1 && copy.front <= copy.rear){
 			file_to_compare = pop(&copy);
 			jsd = computeJSD(curr_file, file_to_compare);
-			printf("%d %s %s\n", jsd, curr_file, file_to_compare);
+			printf("%0.2f %s %s\n", jsd, curr_file, file_to_compare);
 		}
 	}	
 }
@@ -263,10 +320,7 @@ void *traverseDir(void* arguments){
 					if(strcmp(ext, postFix) == 0){
 						realpath(file->d_name, buf);
 						path = strstr(buf, head);	
-						insert(path, files);
-						//printf("path: %s\n", path);
-						//printf("buf: %s\n", buf);	
-						//insert(file->d_name, files);
+						insert(path, files);	
 					}
                                 }
 				//If the file is a directory, add it to the directories queue

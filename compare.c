@@ -37,9 +37,9 @@ struct linkedList{
 typedef struct linkedList linkedList;
 
 
-//WORD FREQUENCY DISTRIBUTION STRUCTURE words and their corresponding frequencies
+//Word Frequency Distribution Structure (WFD)  
 struct wordsList{
-	char word[1024];
+	char* word;
 	int occurences;
 	double frequency;
 	struct wordsList *next;
@@ -47,7 +47,7 @@ struct wordsList{
 typedef struct wordsList wordsList;
 
 
-//Structure to store all file wordsLists
+//Structure to store all file WFD's
 struct filesList{
 	wordsList* wordData;
 	char* fileName;
@@ -58,8 +58,8 @@ typedef struct filesList filesList;
 
 //Arguments to be read by methods called by pthread_create()
 struct args{
-	queue arg1;
-	queue arg2;
+	queue* arg1;
+	queue* arg2;
 };
 typedef struct args args;
 
@@ -134,6 +134,7 @@ char* standardizeString(char* string){
 //Method to read each word of the file and store them in the wordLists
 wordsList* readSource(FILE *file){
 	wordsList* list = malloc(sizeof(wordsList));
+	list->word = malloc(sizeof(char)*100);
 	wordsList* head;
 	list->occurences = 1;
 	list->frequency = 0;
@@ -167,6 +168,7 @@ wordsList* readSource(FILE *file){
 			if(new == 0){
 				list->next = malloc(sizeof(wordsList));
 				list = list->next;
+				list->word = malloc(sizeof(char)*100);
 				list->occurences = 1;
 				list->frequency = 0;
 				list->next = NULL;
@@ -195,14 +197,14 @@ double computeJSD(char* curr_file, char* file_to_compare){
 	return 0.25;
 }
 
-//Count the word frequencies for each file
-void *analyzeWordFrequencies(void* arguments){
+//Get the Word Frequency Distribution for each file
+void *getWFD(void* arguments){
 	 //Wait for the traverseDir method to finish finding all of the files nested in the directory
 	 sleep(6);
 	 FILE* file;
 	 char* input;
 	 args *queues = (args*) arguments;
-   	 queue* files = &queues->arg1;
+   	 queue* files = queues->arg1;
 	 char* curr_file;
 	 char* file_to_compare;
 	 queue copy;
@@ -280,9 +282,8 @@ void *analyzeWordFrequencies(void* arguments){
 //Traverse the directories 
 void *traverseDir(void* arguments){
 	args *queues = (args*) arguments;
-	queue* files = &queues->arg1;
-	queue* dirs = &queues->arg2;
-	
+	queue* files = queues->arg1;
+	queue* dirs = queues->arg2;
     
 	//entering critical section
 	pthread_mutex_lock(&locked);
@@ -329,12 +330,12 @@ void *traverseDir(void* arguments){
 				}
                         }
 	
-        // close directory when finished
-        closedir(cd);
-       // printf("%s\n", current_dir);
+       		//close directory when finished
+        	closedir(cd);
+       		//printf("%s\n", current_dir);
     }
-    pthread_mutex_unlock(&locked);
-    //left critical section
+     pthread_mutex_unlock(&locked);
+     //left critical section
 }
 
 
@@ -344,7 +345,7 @@ int main(int argc, char** argv){
     }
     error_checker = 0;
     int err;
-    pthread_t th1, th2;
+    pthread_t file_thread, dir_thread;
     //Initialize mutex
     err = pthread_mutex_init(&locked, NULL);
     //Check if there was a problem creating the mutex and print to perror
@@ -355,13 +356,17 @@ int main(int argc, char** argv){
     }
 
     //initialize queues
-    queue queue_files;
-    queue_files.front = -1;
-    queue_files.rear = -1;
-    queue queue_dirs;
-    queue_dirs.front = -1;
-    queue_dirs.rear = -1;
+    queue* queue_files = malloc(sizeof(queue));
+    queue_files->front = -1;
+    queue_files->rear = -1;
+    queue* queue_dirs =  malloc(sizeof(queue));
+    queue_dirs->front = -1;
+    queue_dirs->rear = -1;
 
+    //initialize arguments struct
+    args arguments;
+    arguments.arg1 = queue_files;
+    arguments.arg2 = queue_dirs;
 
     //Get command line arguments
     char* input;
@@ -371,45 +376,37 @@ int main(int argc, char** argv){
         if(input[0] == '-'){
         	continue;  
         }
-        //user entered a file
+        //user entered a file -- spawn a file thread -- finish when the queue is empty and all directory threads are finished
         if(isDir(input) == 2){
-        	insert(input, &queue_files);
+        	insert(input, queue_files);
         }
-        //user entered a directory
+        //user entered a directory -- spawn a directory thread
         if(isDir(input) == 1){
-        	insert(input, &queue_dirs);  
-		
+        	insert(input, queue_dirs); 
         }
     }
 
-    //initialize arguments struct
-    args arguments;
-    arguments.arg1 = queue_files;
-    arguments.arg2 = queue_dirs;
 
-    //create a thread to read directory entries
-    err = pthread_create(&th1, NULL, &traverseDir, (void*)&arguments);
-    //Check if there was a problem creating thread1 and print to perror
-    if(err != 0){
-         errno = err;
-         perror("pthread_create");
-         exit(1);
-    }
+	err = pthread_create(&dir_thread, NULL, &traverseDir, (void*)&arguments);
+	if(err != 0){
+       		errno = err;
+        	perror("pthread_create");
+        	exit(1);
+    	}
 
-    //create a thread to analyze word frequencies
-    err = pthread_create(&th2, NULL, &analyzeWordFrequencies, (void*)&arguments);
-    //Check if there was a problem creating thread2 and print to perror
-    if(err != 0){
-        errno = err;
-        perror("pthread_create");
-        exit(1);
-    }
+	err = pthread_create(&file_thread, NULL, &getWFD, (void*)&arguments);
+	if(err != 0){
+        	errno = err;
+        	perror("pthread_create");
+        	exit(1);
+   	 }
+
     if(error_checker == 1){
 	return EXIT_FAILURE;
     }
 
-    pthread_join(th1, NULL);
-    pthread_join(th2, NULL);
+    pthread_join(file_thread, NULL);
+    pthread_join(dir_thread, NULL);
 
     return 0;
 

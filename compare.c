@@ -19,6 +19,7 @@ pthread_mutex_t locked;
 static int chars;
 static int error_checker;
 static int totalWords;
+char* file_suffix;
 
 //Queue to retrieve/store files to compare
 struct queue{
@@ -216,22 +217,36 @@ void *getWFD(void* arguments){
          curr2->next = NULL;
 
 	 int i = 0;
-	 char* temp = "/";
+	// char* temp = malloc(sizeof(char)*100);
 	 char* search;
 	 //Store the filenames with their corresponding wordsList
 	 queue copy2 = *files;
+
+	char cwd[1000];
+	if(getcwd(cwd, sizeof(cwd)) != NULL){
+		printf("Current working directory: %s\n", cwd);
+	}
+
 	 while(copy2.front != -1 && copy2.front <= copy2.rear){
 		 curr_file = pop(&copy2);
 		 search = strchr(curr_file, '/');
 		 if(search == NULL){
-			 file = fopen(curr_file, "r");
+			 if((file = fopen(curr_file, "r")) == NULL){
+				perror("file could not be opened");
+				printf("error: file could not be opened\n");
+			 }
 			//printf("%s\n", curr_file);
 		}
 		else{
 		//file came from inside a directory
+			//strcpy(temp,"/");
 			//printf("%s\n", curr_file);
 			//strcat(temp, curr_file);
-			//file = fopen(temp, "r");
+			printf("Value of curr_file: %s\n", curr_file);
+			if((file = fopen(curr_file, "r")) == NULL){
+				perror("file could not be opened");
+				printf("error: file could not be opened\n");
+			 }
 		}
 		 wordsList* curr = malloc(sizeof(wordsList));
 	 	 curr->occurences = 0;
@@ -254,6 +269,7 @@ void *getWFD(void* arguments){
 		}
 		
 		i++;
+		
 	 }
 	
 	 while(head!=NULL){
@@ -301,7 +317,6 @@ void *traverseDir(void* arguments){
 			}
 			//traverse directory -- add any directories to the directories queue and any files to the files queue
                         char* preFix = ".";
-			char* postFix = "txt";
 			char* ext;
 			char buf[1000];
 			struct dirent *file;
@@ -318,7 +333,7 @@ void *traverseDir(void* arguments){
                                 if((file->d_type == DT_REG) && !(strncmp(preFix, file->d_name, strlen(preFix))==0))
                                 {
 					ext = strchr(file->d_name, '.') + 1;
-					if(strcmp(ext, postFix) == 0){
+					if(strcmp(ext, file_suffix) == 0){
 						realpath(file->d_name, buf);
 						path = strstr(buf, head);	
 						insert(path, files);	
@@ -332,7 +347,7 @@ void *traverseDir(void* arguments){
 	
        		//close directory when finished
         	closedir(cd);
-       		//printf("%s\n", current_dir);
+       		printf("%s\n", current_dir);
     }
      pthread_mutex_unlock(&locked);
      //left critical section
@@ -369,19 +384,101 @@ int main(int argc, char** argv){
     arguments.arg2 = queue_dirs;
 
     //Get command line arguments
+    file_suffix = malloc(sizeof(char)*50);
+    int directory_threads = 1;
+    int file_threads = 1;
+    int analysis_threads = 1;
+    //require all optional arguments to be given at the beginning for simplicity
+    int reg_argument = 0;
+
     char* input;
+    char* optionValue = malloc(sizeof(char)*50);
+    char* ext = malloc(sizeof(char)*50);
     for(int i=1; i<argc ; i++){
         input = argv[i];
         //optional argument was entered
         if(input[0] == '-'){
-        	continue;  
+		if(reg_argument != 0){
+			perror("optional arguments must be entered before regular arguments");
+			continue;
+		}
+		char option = input[1];
+		int j = 0;
+		for(int i=2; i<strlen(input); i++){
+			optionValue[j] = input[i];
+			j++;
+		}
+        	switch(option){
+			//directory threads
+			case 'd':
+				if(input[2]<=0){
+					error_checker = 1;
+					perror("invalid option");
+				}
+				if(directory_threads == 1){
+					directory_threads = atoi(optionValue);
+				}
+				else{
+					error_checker = 1;
+					perror("option already specified");
+				}
+				break;
+			//file threads
+			case 'f':
+				if(input[2]<=0){
+					error_checker = 1;
+					perror("invalid option");
+				}
+				if(file_threads == 1){
+					file_threads = atoi(optionValue);
+				}
+				else{
+					error_checker = 1;
+					perror("option already specified");
+				}
+				break;
+			//analysis threads
+			case 'a':
+				if(input[2]<=0){
+					error_checker = 1;
+					perror("invalid option");
+				}
+				if(analysis_threads == 1){
+					analysis_threads = atoi(optionValue);
+				}
+				else{
+					error_checker = 1;
+					perror("option already specified");
+				}
+				break;
+			//file name suffix
+			case 's':
+				if(strcmp(file_suffix, "") == 0){ 
+					strcpy(file_suffix, optionValue);
+				}
+				else{
+					error_checker = 1;
+					perror("option already specified");
+				}
+				break;
+			default:
+				error_checker = 1;
+				perror("invalid option");
+		}  
         }
         //user entered a file -- spawn a file thread -- finish when the queue is empty and all directory threads are finished
-        if(isDir(input) == 2){
-        	insert(input, queue_files);
+        else if(isDir(input) == 2){
+		reg_argument = 1;
+		if(strcmp(file_suffix, "") == 0) file_suffix = ".txt";
+			ext = strchr(input, '.');
+			if(strcmp(ext, file_suffix) == 0){
+        			insert(input, queue_files);
+			}
         }
         //user entered a directory -- spawn a directory thread
-        if(isDir(input) == 1){
+        else if(isDir(input) == 1){
+		reg_argument = 1;
+		if(strcmp(file_suffix, "") == 0) file_suffix = ".txt";
         	insert(input, queue_dirs); 
         }
     }

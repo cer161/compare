@@ -10,6 +10,7 @@
 #include <fcntl.h>
 #include <dirent.h>
 #include <ctype.h>
+#include <limits.h> /* PATH_MAX */
 
 #define MAX_LENGTH 1000
 #define BUF_SIZE 20
@@ -295,6 +296,8 @@ void *getWFD(void* arguments){
 }
 
 
+
+
 //Traverse the directories 
 void *traverseDir(void* arguments){
 	args *queues = (args*) arguments;
@@ -307,47 +310,56 @@ void *traverseDir(void* arguments){
 	int first = 0;
 	char* current_dir;
 	while(dirs->front != -1 && dirs->front <= dirs->rear){
-			char* head;
-			char* path;
+			char head[100];
        			current_dir = pop(dirs);
 			//Save the directory entered by the user to return the path
 			if(first == 0){
-				head = current_dir;
+				strcpy(head,current_dir);
 				first = 1;
 			}
 			//traverse directory -- add any directories to the directories queue and any files to the files queue
                         char* preFix = ".";
 			char* ext;
-			char buf[1000];
 			struct dirent *file;
-                        chdir(current_dir);
-                        // open current directory after cd
-                        DIR *cd = opendir(".");
-			//Cd out of the current directory
+                        DIR *cd = opendir(current_dir);
+			if(cd == NULL){
+				perror("the directory does not exist");
+				exit(1);
+			}
 			file = readdir(cd);
-			file = readdir(cd);
-                        // loop through files in directory
-                        while((file = readdir(cd)) != NULL)
+			char buf[PATH_MAX];
+			char path2[PATH_MAX];
+			char parent_dir[PATH_MAX];
+			//char* res = malloc(sizeof(char)*1000);
+                        while(file != NULL)
                         {
-				//If the entry is a file and does not begin with ".", add it to the files queue
+				//If the entry is a file and does not begin with "." and contains the specified file suffix, add it to the files queue
                                 if((file->d_type == DT_REG) && !(strncmp(preFix, file->d_name, strlen(preFix))==0))
                                 {
-					ext = strchr(file->d_name, '.') + 1;
+					ext = strchr(file->d_name, '.');
 					if(strcmp(ext, file_suffix) == 0){
-						realpath(file->d_name, buf);
-						path = strstr(buf, head);	
-						insert(path, files);	
+					//NEED TO EDIT THIS LOGIC FOR NESTED DIRECTORIES
+						strcpy(parent_dir, head);
+						strcpy(path2, "/");
+						strcat(path2, file->d_name);
+						strcat(parent_dir, path2);
+						insert(parent_dir, files);
 					}
                                 }
 				//If the file is a directory, add it to the directories queue
-				else if(file->d_type == DT_DIR){
-					insert(file->d_name, dirs);
+				else if(file->d_type == DT_DIR && (strcmp(file->d_name, ".") != 0) && (strcmp(file->d_name, "..") != 0)){
+					char path[100] = {0};
+					strcat(path, current_dir);
+					strcat(path, "/");
+					strcat(path, file->d_name);
+					insert(path, dirs);
 				}
+				file = readdir(cd);
                         }
 	
        		//close directory when finished
         	closedir(cd);
-       		printf("%s\n", current_dir);
+       		//printf("%s\n", current_dir);
     }
      pthread_mutex_unlock(&locked);
      //left critical section

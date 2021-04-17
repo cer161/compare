@@ -10,7 +10,7 @@
 #include <fcntl.h>
 #include <dirent.h>
 #include <ctype.h>
-#include <limits.h> /* PATH_MAX */
+#include <limits.h>
 
 #define MAX_LENGTH 1000
 #define BUF_SIZE 20
@@ -115,7 +115,7 @@ int isDir(char *fileName){
         return 0;
 }
 
-
+//Method to remove punctuation and make everything uppercase
 char* standardizeString(char* string){
 	char* input = string;
 	char* output = malloc(sizeof(char) * 100);
@@ -148,11 +148,9 @@ wordsList* readSource(FILE *file){
 	totalWords = 0;
 	while(fscanf(file, " %1023s", x) == 1){
 		new = 0;
-		//Take out punctuations and uppercase
 		holder = standardizeString(x);
 		if(i == 0){
 			strcpy(list->word, holder);
-			//printf("%s\n", list->word);
 			head = list;
 		}
 		else{
@@ -175,7 +173,6 @@ wordsList* readSource(FILE *file){
 				list->frequency = 0;
 				list->next = NULL;
 				strcpy(list->word, holder);
-				//printf("%s\n", list->word);
 			}
 		}
 		totalWords++;
@@ -187,8 +184,6 @@ wordsList* readSource(FILE *file){
 		t->frequency = t->occurences/(double)totalWords;
 		t = t->next;
 	}
-
-	printf("Total words: %d\n", totalWords);
 	return head;
 
 }
@@ -218,37 +213,17 @@ void *getWFD(void* arguments){
          curr2->next = NULL;
 
 	 int i = 0;
-	// char* temp = malloc(sizeof(char)*100);
-	 char* search;
+
 	 //Store the filenames with their corresponding wordsList
 	 queue copy2 = *files;
-
-	char cwd[1000];
-	if(getcwd(cwd, sizeof(cwd)) != NULL){
-		printf("Current working directory: %s\n", cwd);
-	}
-
 	 while(copy2.front != -1 && copy2.front <= copy2.rear){
 		 curr_file = pop(&copy2);
-		 search = strchr(curr_file, '/');
-		 if(search == NULL){
-			 if((file = fopen(curr_file, "r")) == NULL){
-				perror("file could not be opened");
-				printf("error: file could not be opened\n");
-			 }
-			//printf("%s\n", curr_file);
+		
+		if((file = fopen(curr_file, "r")) == NULL){
+			perror("file could not be opened");
+			error_checker = 1;
 		}
-		else{
-		//file came from inside a directory
-			//strcpy(temp,"/");
-			//printf("%s\n", curr_file);
-			//strcat(temp, curr_file);
-			printf("Value of curr_file: %s\n", curr_file);
-			if((file = fopen(curr_file, "r")) == NULL){
-				perror("file could not be opened");
-				printf("error: file could not be opened\n");
-			 }
-		}
+		
 		 wordsList* curr = malloc(sizeof(wordsList));
 	 	 curr->occurences = 0;
 		 curr->frequency = 0;
@@ -269,8 +244,7 @@ void *getWFD(void* arguments){
 			curr2->next = NULL;
 		}
 		
-		i++;
-		
+		i++;	
 	 }
 	
 	 while(head!=NULL){
@@ -327,39 +301,31 @@ void *traverseDir(void* arguments){
 				exit(1);
 			}
 			file = readdir(cd);
-			char buf[PATH_MAX];
-			char path2[PATH_MAX];
-			char parent_dir[PATH_MAX];
-			//char* res = malloc(sizeof(char)*1000);
-                        while(file != NULL)
-                        {
+			char copy[100];
+                        while(file != NULL){
 				//If the entry is a file and does not begin with "." and contains the specified file suffix, add it to the files queue
-                                if((file->d_type == DT_REG) && !(strncmp(preFix, file->d_name, strlen(preFix))==0))
-                                {
+                                if((file->d_type == DT_REG) && !(strncmp(preFix, file->d_name, strlen(preFix))==0)){
 					ext = strchr(file->d_name, '.');
 					if(strcmp(ext, file_suffix) == 0){
-					//NEED TO EDIT THIS LOGIC FOR NESTED DIRECTORIES
-						strcpy(parent_dir, head);
-						strcpy(path2, "/");
-						strcat(path2, file->d_name);
-						strcat(parent_dir, path2);
-						insert(parent_dir, files);
+						strcpy(copy, current_dir);
+						strcat(copy, "/");
+						strcat(copy, file->d_name);
+						char* real_path = realpath(copy, NULL);
+						insert(copy, files);
 					}
                                 }
 				//If the file is a directory, add it to the directories queue
 				else if(file->d_type == DT_DIR && (strcmp(file->d_name, ".") != 0) && (strcmp(file->d_name, "..") != 0)){
-					char path[100] = {0};
-					strcat(path, current_dir);
-					strcat(path, "/");
-					strcat(path, file->d_name);
-					insert(path, dirs);
+					strcpy(head, current_dir);
+					strcat(head, "/");
+					strcat(head, file->d_name);
+					insert(head, dirs);
 				}
 				file = readdir(cd);
                         }
 	
        		//close directory when finished
         	closedir(cd);
-       		//printf("%s\n", current_dir);
     }
      pthread_mutex_unlock(&locked);
      //left critical section
@@ -494,7 +460,6 @@ int main(int argc, char** argv){
         	insert(input, queue_dirs); 
         }
     }
-
 
 	err = pthread_create(&dir_thread, NULL, &traverseDir, (void*)&arguments);
 	if(err != 0){

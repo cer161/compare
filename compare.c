@@ -13,7 +13,6 @@
 #include <limits.h>
 
 #define MAX_LENGTH 1000
-#define BUF_SIZE 20
 #define SIZE 1000
 
 pthread_mutex_t locked;
@@ -247,8 +246,9 @@ void *getWFD(void* arguments){
 		i++;	
 	 }
 	
+	//Loop for testing purposes -- DELETE BEFORE SUBMISSION
 	 while(head!=NULL){
-		printf("File:\n\n");
+		printf("\n");
 		while(head->wordData != NULL){
 			printf("%s %0.2f\n", head->wordData->word, head->wordData->frequency);
 			head->wordData = head->wordData->next;
@@ -461,19 +461,23 @@ int main(int argc, char** argv){
         }
     }
 
-	err = pthread_create(&dir_thread, NULL, &traverseDir, (void*)&arguments);
-	if(err != 0){
-       		errno = err;
-        	perror("pthread_create");
-        	exit(1);
-    	}
+	for(int j=0; j<directory_threads; j++){
+		err = pthread_create(&dir_thread, NULL, &traverseDir, (void*)&arguments);
+		if(err != 0){
+       			errno = err;
+        		perror("pthread_create");
+        		exit(1);
+    		}
+	}
 
-	err = pthread_create(&file_thread, NULL, &getWFD, (void*)&arguments);
-	if(err != 0){
-        	errno = err;
-        	perror("pthread_create");
-        	exit(1);
-   	 }
+	for(int j=0; j<file_threads; j++){
+		err = pthread_create(&file_thread, NULL, &getWFD, (void*)&arguments);
+		if(err != 0){
+        		errno = err;
+        		perror("pthread_create");
+        		exit(1);
+   	 	}
+	}
 
     if(error_checker == 1){
 	return EXIT_FAILURE;

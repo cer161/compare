@@ -2,7 +2,7 @@
 Caitlyn Romano - cer161
 Anthony Romanushko - ar1738
 
-Testting Strategey:
+Testing Strategey:
 We determined our program was correct by reviewing the requirements and testing to ensure we met the criteria. We tested our program using numerous test cases, a few of which are listed below:
 
 1.) Ensured our program works for all possible regular arguments

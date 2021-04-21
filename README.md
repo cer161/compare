@@ -27,4 +27,4 @@ We determined our program was correct by reviewing the requirements and testing 
     - ensured correct number of threads are created
  5.) Memory
     - ensured memory is dynamically allocated when necessary
-    - tested for memory leaks using address sanitizer
+ 
